@@ -4,18 +4,16 @@
 #include <DallasTemperature.h>
 #include <Wire.h>
 #include <MAX30105.h>
-#include "spo2_algorithm.h"
+#include <spo2_algorithm.h>
 
 #define ONE_WIRE_BUS 18
-
-#define WIFI_TIMEOUT 15000
 
 const char *ssidPath = "/wifi-ssid.txt";
 const char *passPath = "/wifi-pass.txt";
 
+MAX30105 max30102;
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature tempSensors(&oneWire);
-MAX30105 max30102;
 
 uint32_t irBuffer[100];  // infrared LED sensor data
 uint32_t redBuffer[100]; // red LED sensor data
@@ -24,20 +22,14 @@ int8_t validSPO2;        // indicator to show if the SPO2 calculation is valid
 int32_t heartRate;       // heart rate value
 int8_t validHeartRate;   // indicator to show if the heart rate calculation is valid
 float temperatureC;
-float temperatureF;
-
-void restart()
-{
-    Serial.print("Restarting in 5 seconds...");
-    delay(5000);
-    ESP.restart();
-}
 
 void initSPIFFS()
 {
     if (!SPIFFS.begin())
     {
-        restart();
+        Serial.print("Restarting in 5 seconds...");
+        delay(5000);
+        ESP.restart();
     }
 }
 
@@ -67,24 +59,32 @@ void connectToWifi()
     String ssid = readFile(SPIFFS, ssidPath);
     String pass = readFile(SPIFFS, passPath);
 
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(&ssid[0], &pass[0]);
+    Serial.println("Connecting to WiFi...");
+    WiFi.begin(ssid.c_str(), pass.c_str());
+}
 
-    Serial.print("Connecting to WiFi");
-    unsigned long startAttemptMs = millis();
-    while (WiFi.status() != WL_CONNECTED)
+void WiFiEvent(WiFiEvent_t event)
+{
+    Serial.print("[WiFi-event] event: ");
+    Serial.println(event);
+    switch (event)
     {
-        if (millis() - startAttemptMs > WIFI_TIMEOUT)
-        {
-            Serial.println("\r\nConnection failed");
-            restart();
-        }
-        Serial.print(".");
-        delay(100);
+    case SYSTEM_EVENT_STA_GOT_IP:
+        Serial.print("WiFi connected, IP address: ");
+        Serial.println(WiFi.localIP());
+        break;
+    case SYSTEM_EVENT_STA_DISCONNECTED:
+        Serial.println("WiFi lost connection");
+        delay(2000);
+        connectToWifi();
+        break;
     }
+}
 
-    Serial.print("Connected on IP: ");
-    Serial.println(WiFi.localIP());
+void wifiSetup()
+{
+    WiFi.mode(WIFI_STA);
+    WiFi.onEvent(WiFiEvent);
 }
 
 void initMAX30102()
@@ -109,6 +109,7 @@ void setup()
 {
     Serial.begin(115200);
     initSPIFFS();
+    wifiSetup();
     connectToWifi();
     initMAX30102();
     tempSensors.begin();
@@ -127,25 +128,21 @@ void readTemperature()
 {
     tempSensors.requestTemperatures();
     temperatureC = tempSensors.getTempCByIndex(0);
-    temperatureF = tempSensors.getTempFByIndex(0);
 }
 
 void printSensorsData()
 {
-    Serial.print(", HRvalid=");
+    Serial.print("HRvalid= ");
     Serial.print(validHeartRate);
-    Serial.print("HR=");
+    Serial.print(", HR= ");
     Serial.print(heartRate);
-    Serial.print(", SPO2Valid=");
+    Serial.print(", SPO2Valid= ");
     Serial.print(validSPO2);
-    Serial.print(", SPO2=");
+    Serial.print(", SPO2= ");
     Serial.print(spo2);
-    Serial.print(", Celsius temperature=");
+    Serial.print(", Celsius temperature= ");
     Serial.print(temperatureC);
-    Serial.print("ºC");
-    Serial.print(", Fahrenheit temperature=");
-    Serial.print(temperatureF);
-    Serial.println("ºF");
+    Serial.println("ºC");
 }
 
 void loop()
@@ -156,9 +153,9 @@ void loop()
         max30102.nextSample(); // We're finished with this sample so move to next sample
 
         Serial.print("red=");
-        Serial.print(redBuffer[i], DEC);
+        Serial.print(redBuffer[i]);
         Serial.print(", ir=");
-        Serial.println(irBuffer[i], DEC);
+        Serial.println(irBuffer[i]);
     }
 
     // calculate heart rate and SpO2 after first 100 samples (first 4 seconds of samples)
