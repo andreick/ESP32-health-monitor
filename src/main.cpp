@@ -1,15 +1,9 @@
-#include <WiFi.h>
-#include <SPIFFS.h>
-#include <OneWire.h>
-#include <DallasTemperature.h>
-#include <Wire.h>
+#include <WiFiManager.h>
 #include <MAX30105.h>
 #include <spo2_algorithm.h>
+#include <DallasTemperature.h>
 
 #define ONE_WIRE_BUS 18
-
-const char *ssidPath = "/wifi-ssid.txt";
-const char *passPath = "/wifi-pass.txt";
 
 MAX30105 max30102;
 OneWire oneWire(ONE_WIRE_BUS);
@@ -23,68 +17,18 @@ int32_t heartRate;       // heart rate value
 int8_t validHeartRate;   // indicator to show if the heart rate calculation is valid
 float temperatureC;
 
-void initSPIFFS()
+void restart(uint32_t ms)
 {
-    if (!SPIFFS.begin())
-    {
-        Serial.print("Restarting in 5 seconds...");
-        delay(5000);
-        ESP.restart();
-    }
+    Serial.printf("Restarting in %u milliseconds...", ms);
+    delay(ms);
+    ESP.restart();
 }
 
-String readFile(fs::FS &fs, const char *path)
-{
-    Serial.print("Reading file: ");
-    Serial.println(path);
-
-    File file = fs.open(path);
-    if (!file || file.isDirectory())
-    {
-        Serial.println("- failed to open file for reading");
-        return String();
-    }
-
-    String fileContent;
-    while (file.available())
-    {
-        fileContent = file.readStringUntil('\n');
-        break;
-    }
-    return fileContent;
-}
-
-void connectToWifi()
-{
-    String ssid = readFile(SPIFFS, ssidPath);
-    String pass = readFile(SPIFFS, passPath);
-
-    Serial.println("Connecting to WiFi...");
-    WiFi.begin(ssid.c_str(), pass.c_str());
-}
-
-void WiFiEvent(WiFiEvent_t event)
-{
-    Serial.print("[WiFi-event] event: ");
-    Serial.println(event);
-    switch (event)
-    {
-    case SYSTEM_EVENT_STA_GOT_IP:
-        Serial.print("WiFi connected, IP address: ");
-        Serial.println(WiFi.localIP());
-        break;
-    case SYSTEM_EVENT_STA_DISCONNECTED:
-        Serial.println("WiFi lost connection");
-        delay(2000);
-        connectToWifi();
-        break;
-    }
-}
-
-void wifiSetup()
+bool initWifiManager()
 {
     WiFi.mode(WIFI_STA);
-    WiFi.onEvent(WiFiEvent);
+    WiFiManager wm;
+    return wm.autoConnect("HEALTH-MONITOR");
 }
 
 void initMAX30102()
@@ -92,7 +36,7 @@ void initMAX30102()
     if (!max30102.begin(Wire, I2C_SPEED_FAST)) // Use default I2C port, 400kHz speed
     {
         Serial.println("MAX30105 was not found");
-        return;
+        restart(5000);
     }
 
     byte ledBrightness = 60;   // Options: 0=Off to 255=50mA
@@ -108,9 +52,13 @@ void initMAX30102()
 void setup()
 {
     Serial.begin(115200);
-    initSPIFFS();
-    wifiSetup();
-    connectToWifi();
+
+    if (!initWifiManager())
+    {
+        Serial.println("WiFi connection failed");
+        restart(5000);
+    }
+
     initMAX30102();
     tempSensors.begin();
 }
@@ -132,17 +80,9 @@ void readTemperature()
 
 void printSensorsData()
 {
-    Serial.print("HRvalid= ");
-    Serial.print(validHeartRate);
-    Serial.print(", HR= ");
-    Serial.print(heartRate);
-    Serial.print(", SPO2Valid= ");
-    Serial.print(validSPO2);
-    Serial.print(", SPO2= ");
-    Serial.print(spo2);
-    Serial.print(", Celsius temperature= ");
-    Serial.print(temperatureC);
-    Serial.println("ºC");
+    Serial.printf(
+        "HRvalid= %d, HR= %d, SPO2Valid= %d, SPO2= %d, Celsius temperature= %.4f°C\n",
+        validHeartRate, heartRate, validSPO2, spo2, temperatureC);
 }
 
 void loop()
