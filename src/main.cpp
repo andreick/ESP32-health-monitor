@@ -1,9 +1,19 @@
 #include <WiFiManager.h>
+#include <AsyncMqttClient.h>
 #include <MAX30105.h>
 #include <spo2_algorithm.h>
 #include <DallasTemperature.h>
 
+#define MQTT_HOST IPAddress(142, 93, 53, 68)
+#define MQTT_PORT 1883
+
+#define MQTT_PUB_HR "health-monitor/heart-rate"
+#define MQTT_PUB_SPO2 "health-monitor/oxygen-saturation"
+#define MQTT_PUB_TEMPC "health-monitor/temperature-celsius"
+
 #define ONE_WIRE_BUS 18
+
+AsyncMqttClient mqttClient;
 
 MAX30105 max30102;
 OneWire oneWire(ONE_WIRE_BUS);
@@ -29,6 +39,35 @@ bool initWifiManager()
     WiFi.mode(WIFI_STA);
     WiFiManager wm;
     return wm.autoConnect("HEALTH-MONITOR");
+}
+
+void connectToMqtt()
+{
+    Serial.println("Connecting to MQTT...");
+    mqttClient.connect();
+}
+
+void onMqttConnect(bool sessionPresent)
+{
+    Serial.println("Connected to MQTT");
+}
+
+void onMqttDisconnect(AsyncMqttClientDisconnectReason reason)
+{
+    Serial.println("MQTT connection failed");
+    if (WiFi.isConnected())
+    {
+        delay(1000);
+        connectToMqtt();
+    }
+}
+
+void initMqtt()
+{
+    mqttClient.onConnect(onMqttConnect);
+    mqttClient.onDisconnect(onMqttDisconnect);
+    mqttClient.setServer(MQTT_HOST, MQTT_PORT);
+    connectToMqtt();
 }
 
 void initMAX30102()
@@ -59,6 +98,7 @@ void setup()
         restart(5000);
     }
 
+    initMqtt();
     initMAX30102();
     tempSensors.begin();
 }
@@ -85,6 +125,13 @@ void printSensorsData()
         validHeartRate, heartRate, validSPO2, spo2, temperatureC);
 }
 
+void publishSensorsData()
+{
+    mqttClient.publish(MQTT_PUB_HR, 2, true, String(heartRate).c_str());
+    mqttClient.publish(MQTT_PUB_SPO2, 2, true, String(spo2).c_str());
+    mqttClient.publish(MQTT_PUB_TEMPC, 2, true, String(temperatureC).c_str());
+}
+
 void loop()
 {
     for (byte i = 0; i < 100; i++) // read the first 100 samples, and determine the signal range
@@ -105,6 +152,7 @@ void loop()
     {
         readTemperature();
         printSensorsData();
+        publishSensorsData();
 
         for (byte i = 25; i < 100; i++) // dumping the first 25 sets of samples in the memory and shift the last 75 sets of samples to the top
         {
