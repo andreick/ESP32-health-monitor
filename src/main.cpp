@@ -27,10 +27,17 @@ int32_t heartRate;       // heart rate value
 int8_t validHeartRate;   // indicator to show if the heart rate calculation is valid
 float temperatureC;
 
-void restart(uint32_t ms)
+void restart(byte seconds)
 {
-    Serial.printf("Restarting in %u milliseconds...", ms);
-    delay(ms);
+    pinMode(LED_BUILTIN, OUTPUT);
+    bool ledState = LOW;
+    Serial.printf("Restarting in %u seconds...", seconds);
+    for (uint16_t i = 0; i < seconds * 10; i++)
+    {
+        ledState = !ledState;
+        digitalWrite(LED_BUILTIN, ledState);
+        delay(seconds * 100);
+    }
     ESP.restart();
 }
 
@@ -74,8 +81,8 @@ void initMAX30102()
 {
     if (!max30102.begin(Wire, I2C_SPEED_FAST)) // Use default I2C port, 400kHz speed
     {
-        Serial.println("MAX30105 was not found");
-        restart(5000);
+        Serial.println("MAX30102 was not found");
+        restart(5);
     }
 
     byte ledBrightness = 60;   // Options: 0=Off to 255=50mA
@@ -95,7 +102,7 @@ void setup()
     if (!initWifiManager())
     {
         Serial.println("WiFi connection failed");
-        restart(5000);
+        restart(5);
     }
 
     initMqtt();
@@ -127,9 +134,21 @@ void printSensorsData()
 
 void publishSensorsData()
 {
-    mqttClient.publish(MQTT_PUB_HR, 2, true, String(heartRate).c_str());
-    mqttClient.publish(MQTT_PUB_SPO2, 2, true, String(spo2).c_str());
-    mqttClient.publish(MQTT_PUB_TEMPC, 2, true, String(temperatureC).c_str());
+    if (mqttClient.connected())
+    {
+        if (validHeartRate)
+        {
+            mqttClient.publish(MQTT_PUB_HR, 2, true, String(heartRate).c_str());
+        }
+        if (validSPO2)
+        {
+            mqttClient.publish(MQTT_PUB_SPO2, 2, true, String(spo2).c_str());
+        }
+        if (temperatureC != -127.0F)
+        {
+            mqttClient.publish(MQTT_PUB_TEMPC, 2, true, String(temperatureC).c_str());
+        }
+    }
 }
 
 void loop()
@@ -139,10 +158,7 @@ void loop()
         readMAX30102Sample(i);
         max30102.nextSample(); // We're finished with this sample so move to next sample
 
-        Serial.print("red=");
-        Serial.print(redBuffer[i]);
-        Serial.print(", ir=");
-        Serial.println(irBuffer[i]);
+        Serial.printf("red=%u, ir=%u\n", redBuffer[i], irBuffer[i]);
     }
 
     // calculate heart rate and SpO2 after first 100 samples (first 4 seconds of samples)
