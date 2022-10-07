@@ -16,28 +16,24 @@
 AsyncMqttClient mqttClient;
 
 MAX30105 max30102;
-OneWire oneWire(ONE_WIRE_BUS);
-DallasTemperature tempSensors(&oneWire);
-
 uint32_t irBuffer[100];  // infrared LED sensor data
 uint32_t redBuffer[100]; // red LED sensor data
 int32_t spo2;            // SPO2 value
 int8_t validSPO2;        // indicator to show if the SPO2 calculation is valid
 int32_t heartRate;       // heart rate value
 int8_t validHeartRate;   // indicator to show if the heart rate calculation is valid
+
+OneWire oneWire(ONE_WIRE_BUS);
+DallasTemperature tempSensors(&oneWire);
+TimerHandle_t tempTimer;
 float temperatureC;
 
 void restart(byte seconds)
 {
     pinMode(LED_BUILTIN, OUTPUT);
-    bool ledState = LOW;
+    digitalWrite(LED_BUILTIN, HIGH);
     Serial.printf("Restarting in %u seconds...", seconds);
-    for (uint16_t i = 0; i < seconds * 10; i++)
-    {
-        ledState = !ledState;
-        digitalWrite(LED_BUILTIN, ledState);
-        delay(seconds * 100);
-    }
+    delay(seconds * 1000);
     ESP.restart();
 }
 
@@ -64,7 +60,7 @@ void onMqttDisconnect(AsyncMqttClientDisconnectReason reason)
     Serial.println("MQTT connection failed");
     if (WiFi.isConnected())
     {
-        delay(1000);
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
         connectToMqtt();
     }
 }
@@ -75,6 +71,69 @@ void initMqtt()
     mqttClient.onDisconnect(onMqttDisconnect);
     mqttClient.setServer(MQTT_HOST, MQTT_PORT);
     connectToMqtt();
+}
+
+void readMAX30102Sample(byte i)
+{
+    while (!max30102.available()) // do we have new data?
+        max30102.check();         // Check the sensor for new data
+
+    redBuffer[i] = max30102.getRed();
+    irBuffer[i] = max30102.getIR();
+}
+
+void printMAX30102Data()
+{
+    Serial.printf(
+        "HRvalid= %d, HR= %d, SPO2Valid= %d, SPO2= %d\n",
+        validHeartRate, heartRate, validSPO2, spo2);
+}
+
+void publishMAX30102Data()
+{
+    if (validHeartRate)
+    {
+        mqttClient.publish(MQTT_PUB_HR, 2, true, String(heartRate).c_str());
+    }
+    if (validSPO2)
+    {
+        mqttClient.publish(MQTT_PUB_SPO2, 2, true, String(spo2).c_str());
+    }
+}
+
+void runMAX30102(void *params)
+{
+    for (byte i = 0; i < 100; i++) // read the first 100 samples, and determine the signal range
+    {
+        readMAX30102Sample(i);
+        max30102.nextSample(); // We're finished with this sample so move to next sample
+
+        Serial.printf("red=%u, ir=%u\n", redBuffer[i], irBuffer[i]);
+    }
+
+    // calculate heart rate and SpO2 after first 100 samples (first 4 seconds of samples)
+    maxim_heart_rate_and_oxygen_saturation(irBuffer, 100, redBuffer, &spo2, &validSPO2, &heartRate, &validHeartRate);
+
+    for (;;) // Continuously taking samples from MAX30102.  Heart rate and SpO2 are calculated every 1 second
+    {
+        publishMAX30102Data();
+        printMAX30102Data();
+
+        for (byte i = 25; i < 100; i++) // dumping the first 25 sets of samples in the memory and shift the last 75 sets of samples to the top
+        {
+            redBuffer[i - 25] = redBuffer[i];
+            irBuffer[i - 25] = irBuffer[i];
+        }
+
+        for (byte i = 75; i < 100; i++) // take 25 sets of samples before calculating the heart rate.
+        {
+            readMAX30102Sample(i);
+            max30102.nextSample(); // We're finished with this sample so move to next sample
+        }
+
+        // After gathering 25 new samples recalculate HR and SP02
+        maxim_heart_rate_and_oxygen_saturation(irBuffer, 100, redBuffer, &spo2, &validSPO2, &heartRate, &validHeartRate);
+    }
 }
 
 void initMAX30102()
@@ -93,6 +152,41 @@ void initMAX30102()
     uint16_t adcRange = 4096;  // Options: 2048, 4096, 8192, 16384
 
     max30102.setup(ledBrightness, sampleAverage, ledMode, sampleRate, pulseWidth, adcRange); // Configure sensor with these settings
+
+    xTaskCreate(runMAX30102, "Run MAX30102", 4096, NULL, 2, NULL);
+}
+
+void readTemperature()
+{
+    tempSensors.requestTemperatures();
+    temperatureC = tempSensors.getTempCByIndex(0);
+}
+
+void printTemperature()
+{
+    Serial.printf("Celsius temperature= %.4f°C\n", temperatureC);
+}
+
+void publishTemperature()
+{
+    if (temperatureC != -127.0F)
+    {
+        mqttClient.publish(MQTT_PUB_TEMPC, 2, true, String(temperatureC).c_str());
+    }
+}
+
+void runTempSensor(TimerHandle_t timer)
+{
+    readTemperature();
+    publishTemperature();
+    printTemperature();
+}
+
+void initTempSensor()
+{
+    tempSensors.begin();
+    tempTimer = xTimerCreate("Temperature timer", 1000 / portTICK_PERIOD_MS, pdTRUE, (void *)0, runTempSensor);
+    xTimerStart(tempTimer, 0);
 }
 
 void setup()
@@ -107,82 +201,9 @@ void setup()
 
     initMqtt();
     initMAX30102();
-    tempSensors.begin();
+    initTempSensor();
+
+    vTaskDelete(NULL); // Delete loop task
 }
 
-void readMAX30102Sample(byte i)
-{
-    while (!max30102.available()) // do we have new data?
-        max30102.check();         // Check the sensor for new data
-
-    redBuffer[i] = max30102.getRed();
-    irBuffer[i] = max30102.getIR();
-}
-
-void readTemperature()
-{
-    tempSensors.requestTemperatures();
-    temperatureC = tempSensors.getTempCByIndex(0);
-}
-
-void printSensorsData()
-{
-    Serial.printf(
-        "HRvalid= %d, HR= %d, SPO2Valid= %d, SPO2= %d, Celsius temperature= %.4f°C\n",
-        validHeartRate, heartRate, validSPO2, spo2, temperatureC);
-}
-
-void publishSensorsData()
-{
-    if (mqttClient.connected())
-    {
-        if (validHeartRate)
-        {
-            mqttClient.publish(MQTT_PUB_HR, 2, true, String(heartRate).c_str());
-        }
-        if (validSPO2)
-        {
-            mqttClient.publish(MQTT_PUB_SPO2, 2, true, String(spo2).c_str());
-        }
-        if (temperatureC != -127.0F)
-        {
-            mqttClient.publish(MQTT_PUB_TEMPC, 2, true, String(temperatureC).c_str());
-        }
-    }
-}
-
-void loop()
-{
-    for (byte i = 0; i < 100; i++) // read the first 100 samples, and determine the signal range
-    {
-        readMAX30102Sample(i);
-        max30102.nextSample(); // We're finished with this sample so move to next sample
-
-        Serial.printf("red=%u, ir=%u\n", redBuffer[i], irBuffer[i]);
-    }
-
-    // calculate heart rate and SpO2 after first 100 samples (first 4 seconds of samples)
-    maxim_heart_rate_and_oxygen_saturation(irBuffer, 100, redBuffer, &spo2, &validSPO2, &heartRate, &validHeartRate);
-
-    for (;;) // Continuously taking samples from MAX30102.  Heart rate and SpO2 are calculated every 1 second
-    {
-        readTemperature();
-        printSensorsData();
-        publishSensorsData();
-
-        for (byte i = 25; i < 100; i++) // dumping the first 25 sets of samples in the memory and shift the last 75 sets of samples to the top
-        {
-            redBuffer[i - 25] = redBuffer[i];
-            irBuffer[i - 25] = irBuffer[i];
-        }
-
-        for (byte i = 75; i < 100; i++) // take 25 sets of samples before calculating the heart rate.
-        {
-            readMAX30102Sample(i);
-            max30102.nextSample(); // We're finished with this sample so move to next sample
-        }
-
-        // After gathering 25 new samples recalculate HR and SP02
-        maxim_heart_rate_and_oxygen_saturation(irBuffer, 100, redBuffer, &spo2, &validSPO2, &heartRate, &validHeartRate);
-    }
-}
+void loop() {} // Execution never reach here
