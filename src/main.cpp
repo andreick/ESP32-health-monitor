@@ -1,7 +1,7 @@
 #include <WiFiManager.h>
 #include <AsyncMqttClient.h>
 #include <MAX30105.h>
-#include <spo2_algorithm.h>
+#include <algorithm_by_RF.h>
 #include <DallasTemperature.h>
 
 #define MQTT_HOST IPAddress(142, 93, 53, 68)
@@ -18,7 +18,7 @@ AsyncMqttClient mqttClient;
 MAX30105 max30102;
 uint32_t irBuffer[100];  // infrared LED sensor data
 uint32_t redBuffer[100]; // red LED sensor data
-int32_t spo2;            // SPO2 value
+float spo2;              // SPO2 value
 int8_t validSPO2;        // indicator to show if the SPO2 calculation is valid
 int32_t heartRate;       // heart rate value
 int8_t validHeartRate;   // indicator to show if the heart rate calculation is valid
@@ -85,7 +85,7 @@ void readMAX30102Sample(byte i)
 void printMAX30102Data()
 {
     Serial.printf(
-        "HRvalid= %d, HR= %d, SPO2Valid= %d, SPO2= %d\n",
+        "HRvalid= %d, HR= %d\tSPO2Valid= %d, SPO2= %.4f\n",
         validHeartRate, heartRate, validSPO2, spo2);
 }
 
@@ -103,16 +103,18 @@ void publishMAX30102Data()
 
 void runMAX30102(void *params)
 {
+    float ratio, correl;
+
     for (byte i = 0; i < 100; i++) // read the first 100 samples, and determine the signal range
     {
         readMAX30102Sample(i);
         max30102.nextSample(); // We're finished with this sample so move to next sample
 
-        Serial.printf("red=%u, ir=%u\n", redBuffer[i], irBuffer[i]);
+        Serial.printf("%u red=%u\tir=%u\n", i, redBuffer[i], irBuffer[i]);
     }
 
     // calculate heart rate and SpO2 after first 100 samples (first 4 seconds of samples)
-    maxim_heart_rate_and_oxygen_saturation(irBuffer, 100, redBuffer, &spo2, &validSPO2, &heartRate, &validHeartRate);
+    rf_heart_rate_and_oxygen_saturation(irBuffer, BUFFER_SIZE, redBuffer, &spo2, &validSPO2, &heartRate, &validHeartRate, &ratio, &correl);
 
     for (;;) // Continuously taking samples from MAX30102.  Heart rate and SpO2 are calculated every 1 second
     {
@@ -132,7 +134,7 @@ void runMAX30102(void *params)
         }
 
         // After gathering 25 new samples recalculate HR and SP02
-        maxim_heart_rate_and_oxygen_saturation(irBuffer, 100, redBuffer, &spo2, &validSPO2, &heartRate, &validHeartRate);
+        rf_heart_rate_and_oxygen_saturation(irBuffer, BUFFER_SIZE, redBuffer, &spo2, &validSPO2, &heartRate, &validHeartRate, &ratio, &correl);
     }
 }
 
@@ -147,7 +149,7 @@ void initMAX30102()
     byte ledBrightness = 60;   // Options: 0=Off to 255=50mA
     byte sampleAverage = 4;    // Options: 1, 2, 4, 8, 16, 32
     byte ledMode = 2;          // Options: 2 = Red + IR
-    byte sampleRate = 100;     // Options: 50, 100, 200, 400, 800, 1000, 1600, 3200
+    byte sampleRate = 200;     // Options: 50, 100, 200, 400, 800, 1000, 1600, 3200
     uint16_t pulseWidth = 411; // Options: 69, 118, 215, 411
     uint16_t adcRange = 4096;  // Options: 2048, 4096, 8192, 16384
 
