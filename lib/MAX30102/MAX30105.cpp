@@ -221,7 +221,7 @@ void MAX30105::softReset(void) {
   {
     uint8_t response = readRegister8(_i2caddr, MAX30105_MODECONFIG);
     if ((response & MAX30105_RESET) == 0) break; //We're done!
-    delay(1); //Let's not over burden the I2C bus
+    vTaskDelay(1 / portTICK_PERIOD_MS); //Let's not over burden the I2C bus
   }
 }
 
@@ -382,7 +382,7 @@ float MAX30105::readTemperature() {
 	//Check to see if DIE_TEMP_RDY interrupt is set
 	uint8_t response = readRegister8(_i2caddr, MAX30105_INTSTAT2);
     if ((response & MAX30105_INT_DIE_TEMP_RDY_ENABLE) > 0) break; //We're done!
-    delay(1); //Let's not over burden the I2C bus
+    vTaskDelay(1 / portTICK_PERIOD_MS); //Let's not over burden the I2C bus
   }
   //TODO How do we want to fail? With what type of error?
   //? if(millis() - startTime >= 100) return(-999.0);
@@ -712,7 +712,7 @@ bool MAX30105::safeCheck(uint8_t maxTimeToCheck)
 	if(check() == true) //We found new data!
 	  return(true);
 
-	delay(1);
+    vTaskDelay(1 / portTICK_PERIOD_MS);
   }
 }
 
