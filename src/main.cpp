@@ -1,23 +1,17 @@
 #include <WiFiManager.h>
 #include <AsyncMqttClient.h>
-#include <DallasTemperature.h>
 
 #include "sensors/PulseOximeter.hpp"
+#include "sensors/TemperatureSensor.hpp"
 
 #define MQTT_HOST IPAddress(142, 93, 53, 68)
 #define MQTT_PORT 1883
 
-#define MQTT_PUB_TEMPC "health-monitor/temperature-celsius"
-
-#define ONE_WIRE_BUS 18
+constexpr uint8_t oneWireBus = 18;
 
 AsyncMqttClient mqttClient;
 PulseOximeter pulseOximeter(mqttClient);
-
-OneWire oneWire(ONE_WIRE_BUS);
-DallasTemperature tempSensors(&oneWire);
-TimerHandle_t tempTimer;
-float temperatureC;
+TemperatureSensor tempSensor(oneWireBus, mqttClient);
 
 void restart(byte seconds)
 {
@@ -65,39 +59,6 @@ void initMqtt()
     connectToMqtt();
 }
 
-void readTemperature()
-{
-    tempSensors.requestTemperatures();
-    temperatureC = tempSensors.getTempCByIndex(0);
-}
-
-void printTemperature()
-{
-    Serial.printf("Celsius temperature= %.4f°C\n", temperatureC);
-}
-
-void publishTemperature()
-{
-    if (temperatureC != -127.0F)
-    {
-        mqttClient.publish(MQTT_PUB_TEMPC, 2, true, String(temperatureC).c_str());
-    }
-}
-
-void runTempSensor(TimerHandle_t timer)
-{
-    readTemperature();
-    publishTemperature();
-    printTemperature();
-}
-
-void initTempSensor()
-{
-    tempSensors.begin();
-    tempTimer = xTimerCreate("Temperature timer", 1000 / portTICK_PERIOD_MS, pdTRUE, (void *)0, runTempSensor);
-    xTimerStart(tempTimer, 0);
-}
-
 void setup()
 {
     Serial.begin(115200);
@@ -111,7 +72,8 @@ void setup()
     initMqtt();
     pulseOximeter.begin();
     pulseOximeter.start();
-    initTempSensor();
+    tempSensor.begin();
+    tempSensor.start();
 
     vTaskDelete(nullptr); // Delete loop task
 }
