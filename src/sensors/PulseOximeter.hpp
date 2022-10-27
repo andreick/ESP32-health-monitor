@@ -22,12 +22,12 @@ private:
 
     MAX30105 _max30102;
 
-    uint32_t irBuffer[BUFFER_SIZE];  // infrared LED sensor data
-    uint32_t redBuffer[BUFFER_SIZE]; // red LED sensor data
-    float spo2;                      // SPO2 value
-    int8_t validSPO2;                // indicator to show if the SPO2 calculation is valid
-    int32_t heartRate;               // heart rate value
-    int8_t validHeartRate;           // indicator to show if the heart rate calculation is valid
+    uint32_t _irBuffer[BUFFER_SIZE];  // infrared LED sensor data
+    uint32_t _redBuffer[BUFFER_SIZE]; // red LED sensor data
+    float _spo2;                      // SPO2 value
+    int8_t _validSPO2;                // indicator to show if the SPO2 calculation is valid
+    int32_t _heartRate;               // heart rate value
+    int8_t _validHeartRate;           // indicator to show if the heart rate calculation is valid
 
     static void _loop(void *params);
 
