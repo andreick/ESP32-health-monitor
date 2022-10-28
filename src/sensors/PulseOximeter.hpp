@@ -7,7 +7,7 @@ class PulseOximeter
 public:
     PulseOximeter(AsyncMqttClient &mqttClient);
 
-    bool begin(TwoWire &wirePort = Wire);
+    bool begin(TwoWire &wirePort, int sda, int scl);
     bool start();
     void stop() const;
 

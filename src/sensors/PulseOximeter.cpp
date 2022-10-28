@@ -8,8 +8,9 @@ PulseOximeter::PulseOximeter(AsyncMqttClient &mqttClient)
     _mqttClient = &mqttClient;
 }
 
-bool PulseOximeter::begin(TwoWire &wirePort)
+bool PulseOximeter::begin(TwoWire &wirePort, int sda, int scl)
 {
+    wirePort.setPins(sda, scl);
     if (!_max30102.begin(wirePort, I2C_SPEED_FAST)) // 400kHz speed
     {
         Serial.println("MAX30102 was not found");

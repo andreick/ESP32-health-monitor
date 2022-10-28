@@ -3,15 +3,22 @@
 
 #include "sensors/PulseOximeter.hpp"
 #include "sensors/TemperatureSensor.hpp"
+#include "sensors/BloodPressureMonitor.hpp"
 
 #define MQTT_HOST IPAddress(142, 93, 53, 68)
 #define MQTT_PORT 1883
 
-constexpr uint8_t oneWireBus = 18;
+constexpr uint8_t tempOneWireBus = 18;
+constexpr int pulseOxSda = 21;
+constexpr int pulseOxScl = 22;
+constexpr uint8_t bpmPowerPin = 25;
+constexpr int bpmSda = 27;
+constexpr int bpmScl = 26;
 
 AsyncMqttClient mqttClient;
 PulseOximeter pulseOximeter(mqttClient);
-TemperatureSensor tempSensor(oneWireBus, mqttClient);
+TemperatureSensor tempSensor(tempOneWireBus, mqttClient);
+BloodPressureMonitor bloodPressureMonitor(bpmPowerPin, mqttClient);
 
 void restart(byte seconds)
 {
@@ -69,11 +76,13 @@ void setup()
         restart(5);
     }
 
-    initMqtt();
-    pulseOximeter.begin();
+    // initMqtt();
+    pulseOximeter.begin(Wire1, pulseOxSda, pulseOxScl);
     pulseOximeter.start();
     tempSensor.begin();
     tempSensor.start();
+    bloodPressureMonitor.begin(Wire, bpmSda, bpmScl);
+    bloodPressureMonitor.start();
 
     vTaskDelete(nullptr); // Delete loop task
 }
