@@ -12,30 +12,34 @@ TemperatureSensor::TemperatureSensor(uint8_t oneWireBus, AsyncMqttClient &mqttCl
 void TemperatureSensor::begin()
 {
     _dallasSensors->begin();
-    _temperatureTimer = xTimerCreate("Temperature timer", 1000 / portTICK_PERIOD_MS,
-                                     pdTRUE, static_cast<void *>(this), _run);
 }
 
 bool TemperatureSensor::start()
 {
-    if (_temperatureTimer == nullptr)
-        return false;
-    return xTimerStart(_temperatureTimer, 0);
+    return xTaskCreate(_loop, "Temperature Sensor Loop", 2048, static_cast<void *>(this), 2, &_loopTask);
 }
 
-bool TemperatureSensor::stop()
+void TemperatureSensor::stop()
 {
-    if (_temperatureTimer == nullptr)
-        return false;
-    return xTimerStop(_temperatureTimer, 0);
+    if (_loopTask != nullptr)
+    {
+        vTaskDelete(_loopTask);
+    }
 }
 
-void TemperatureSensor::_run(TimerHandle_t timer)
+void TemperatureSensor::_loop(void *params)
 {
-    auto *tempSensor = static_cast<TemperatureSensor *>(pvTimerGetTimerID(timer));
-    tempSensor->_readTemperature();
-    tempSensor->_publishTemperature();
-    tempSensor->_printTemperature();
+    auto *tempSensor = static_cast<TemperatureSensor *>(params);
+    TickType_t lastTicks = xTaskGetTickCount();
+    for (;;)
+    {
+        // Run every 1 second
+        vTaskDelayUntil(&lastTicks, 1000 / portTICK_PERIOD_MS);
+
+        tempSensor->_readTemperature();
+        tempSensor->_publishTemperature();
+        tempSensor->_printTemperature();
+    }
 }
 
 void TemperatureSensor::_readTemperature()
@@ -51,8 +55,11 @@ void TemperatureSensor::_printTemperature() const
 
 void TemperatureSensor::_publishTemperature()
 {
-    if (_temperatureC != -127.0F)
+    if (_mqttClient != nullptr)
     {
-        _mqttClient->publish(_mqttPubTempC.c_str(), 2, true, String(_temperatureC).c_str());
+        if (_temperatureC != -127.0F)
+        {
+            _mqttClient->publish(_mqttPubTempC.c_str(), 2, true, String(_temperatureC).c_str());
+        }
     }
 }

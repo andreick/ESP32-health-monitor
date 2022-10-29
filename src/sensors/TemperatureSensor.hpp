@@ -1,4 +1,5 @@
 #include <memory>
+#include <OneWire.h>
 #include <DallasTemperature.h>
 #include <AsyncMqttClient.h>
 
@@ -9,7 +10,7 @@ public:
 
     void begin();
     bool start();
-    bool stop();
+    void stop();
 
 private:
     static std::string const _mqttPubTempC;
@@ -19,11 +20,11 @@ private:
     std::unique_ptr<OneWire> _oneWire;
     std::unique_ptr<DallasTemperature> _dallasSensors;
 
-    TimerHandle_t _temperatureTimer;
+    TaskHandle_t _loopTask;
 
     float _temperatureC;
 
-    static void _run(TimerHandle_t timer);
+    static void _loop(void *params);
 
     void _readTemperature();
     void _printTemperature() const;

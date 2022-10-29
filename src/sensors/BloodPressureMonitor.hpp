@@ -24,5 +24,5 @@ private:
     static int _readData();
     static String _hexToString(int hex);
     static void _printData();
-    static void _publishData();
+    static void _publishBloodPressure();
 };

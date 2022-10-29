@@ -3,10 +3,10 @@
 std::string const BloodPressureMonitor::_mqttPubBP = "health-monitor/vitals/BP";
 
 byte numWritings;
-String sys;
-String dia;
-String bp;
-int hr;
+String systolic;
+String diastolic;
+String bloodPressure;
+int heartRate;
 AsyncMqttClient *_mqttClient;
 
 BloodPressureMonitor::BloodPressureMonitor(uint8_t powerPin, AsyncMqttClient &mqttClient)
@@ -41,13 +41,13 @@ void BloodPressureMonitor::_loop(void *params)
     TickType_t lastTicks = xTaskGetTickCount();
     for (;;)
     {
+        // Run every 2 minutes
+        vTaskDelayUntil(&lastTicks, 2 * minuteMs / portTICK_PERIOD_MS);
+
         // The start button must be pressed twice to begin the measurement
         bpm->_pushPowerButton();
         vTaskDelay(200 / portTICK_PERIOD_MS);
         bpm->_pushPowerButton();
-
-        // Run every 2 minutes
-        vTaskDelayUntil(&lastTicks, 2 * minuteMs / portTICK_PERIOD_MS);
     }
 }
 
@@ -80,20 +80,20 @@ void BloodPressureMonitor::_receiveEvent(int numBytes)
             switch (data)
             {
             case 0x10:
-                sys = "1";
-                dia = "";
+                systolic = "1";
+                diastolic = "";
                 break;
             case 0x11:
-                sys = "1";
-                dia = "1";
+                systolic = "1";
+                diastolic = "1";
                 break;
             case 0x01:
-                sys = "";
-                dia = "1";
+                systolic = "";
+                diastolic = "1";
                 break;
             case 0x00:
-                sys = "";
-                dia = "";
+                systolic = "";
+                diastolic = "";
                 break;
             }
             break;
@@ -101,20 +101,21 @@ void BloodPressureMonitor::_receiveEvent(int numBytes)
         case 7:
         {
             int data = _readData();
-            sys += _hexToString(data);
+            systolic += _hexToString(data);
             break;
         }
         case 8:
         {
             int data = _readData();
-            dia += _hexToString(data);
+            diastolic += _hexToString(data);
             break;
         }
         case 9:
-            hr = _readData();
+            heartRate = _readData();
             break;
         case 10:
-            bp = sys + "/" + dia;
+            bloodPressure = systolic + "/" + diastolic;
+            _publishBloodPressure();
             _printData();
             numWritings = 0;
             break;
@@ -140,13 +141,13 @@ String BloodPressureMonitor::_hexToString(int hex)
 
 void BloodPressureMonitor::_printData()
 {
-    Serial.printf("Blood pressure= %s mmHg\tHeart rate= %d bpm\n", bp, hr);
+    Serial.printf("Blood pressure= %s mmHg\tHeart rate= %d bpm\n", bloodPressure, heartRate);
 }
 
-void BloodPressureMonitor::_publishData()
+void BloodPressureMonitor::_publishBloodPressure()
 {
     if (_mqttClient != nullptr)
     {
-        _mqttClient->publish(_mqttPubBP.c_str(), 2, true, bp.c_str());
+        _mqttClient->publish(_mqttPubBP.c_str(), 2, true, bloodPressure.c_str());
     }
 }

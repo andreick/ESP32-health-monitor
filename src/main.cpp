@@ -5,8 +5,8 @@
 #include "sensors/TemperatureSensor.hpp"
 #include "sensors/BloodPressureMonitor.hpp"
 
-#define MQTT_HOST IPAddress(142, 93, 53, 68)
-#define MQTT_PORT 1883
+const IPAddress mqttBrokerIp(137, 184, 107, 130);
+constexpr uint16_t mqttPort = 1883;
 
 constexpr uint8_t tempOneWireBus = 18;
 constexpr int pulseOxSda = 21;
@@ -62,7 +62,7 @@ void initMqtt()
 {
     mqttClient.onConnect(onMqttConnect);
     mqttClient.onDisconnect(onMqttDisconnect);
-    mqttClient.setServer(MQTT_HOST, MQTT_PORT);
+    mqttClient.setServer(mqttBrokerIp, mqttPort);
     connectToMqtt();
 }
 
@@ -76,7 +76,7 @@ void setup()
         restart(5);
     }
 
-    // initMqtt();
+    initMqtt();
     pulseOximeter.begin(Wire1, pulseOxSda, pulseOxScl);
     pulseOximeter.start();
     tempSensor.begin();
