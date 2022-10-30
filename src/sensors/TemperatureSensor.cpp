@@ -51,7 +51,7 @@ void TemperatureSensor::_publishTemperature()
     {
         if (_temperatureC != -127.0F)
         {
-            _mqttClient->publish(_mqttPubTempC.c_str(), 2, true, std::to_string(_temperatureC).c_str());
+            _mqttClient->publish(_mqttPubTempC.c_str(), 0, true, std::to_string(_temperatureC).c_str());
         }
     }
 }

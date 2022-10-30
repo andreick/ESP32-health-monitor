@@ -105,11 +105,11 @@ void PulseOximeter::_publishData()
     {
         if (_validHeartRate)
         {
-            _mqttClient->publish(_mqttPubHR.c_str(), 2, true, std::to_string(_heartRate).c_str());
+            _mqttClient->publish(_mqttPubHR.c_str(), 0, true, std::to_string(_heartRate).c_str());
         }
         if (_validSPO2)
         {
-            _mqttClient->publish(_mqttPubSpO2.c_str(), 2, true, std::to_string(_spo2).c_str());
+            _mqttClient->publish(_mqttPubSpO2.c_str(), 0, true, std::to_string(_spo2).c_str());
         }
     }
 }
