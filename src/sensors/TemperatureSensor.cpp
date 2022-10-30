@@ -16,15 +16,7 @@ void TemperatureSensor::begin()
 
 bool TemperatureSensor::start()
 {
-    return xTaskCreate(_loop, "Temperature Sensor Loop", 2048, static_cast<void *>(this), 2, &_loopTask);
-}
-
-void TemperatureSensor::stop()
-{
-    if (_loopTask != nullptr)
-    {
-        vTaskDelete(_loopTask);
-    }
+    return xTaskCreate(_loop, "Temperature Sensor Loop", 2048, static_cast<void *>(this), 2, &_loopHandle);
 }
 
 void TemperatureSensor::_loop(void *params)
@@ -59,7 +51,7 @@ void TemperatureSensor::_publishTemperature()
     {
         if (_temperatureC != -127.0F)
         {
-            _mqttClient->publish(_mqttPubTempC.c_str(), 2, true, String(_temperatureC).c_str());
+            _mqttClient->publish(_mqttPubTempC.c_str(), 2, true, std::to_string(_temperatureC).c_str());
         }
     }
 }

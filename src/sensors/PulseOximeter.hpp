@@ -1,15 +1,15 @@
 #include <MAX30105.h>
 #include <algorithm_by_RF.h>
 #include <AsyncMqttClient.h>
+#include "abstract/LoopTask.hpp"
 
-class PulseOximeter
+class PulseOximeter : public LoopTask
 {
 public:
     PulseOximeter(AsyncMqttClient &mqttClient);
 
     bool begin(TwoWire &wirePort, int sda, int scl);
     bool start();
-    void stop() const;
 
 private:
     static constexpr uint32_t _fingerPresenceThreshold = 200000;
@@ -17,8 +17,6 @@ private:
     static std::string const _mqttPubSpO2;
 
     AsyncMqttClient *_mqttClient;
-
-    TaskHandle_t _loopTask;
 
     MAX30105 _max30102;
 

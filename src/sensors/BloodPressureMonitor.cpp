@@ -24,15 +24,7 @@ void BloodPressureMonitor::begin(TwoWire &wirePort, int sda, int scl)
 
 bool BloodPressureMonitor::start()
 {
-    return xTaskCreate(_loop, "BPM Loop", configMINIMAL_STACK_SIZE, static_cast<void *>(this), 1, &_loopTask);
-}
-
-void BloodPressureMonitor::stop()
-{
-    if (_loopTask != nullptr)
-    {
-        vTaskDelete(_loopTask);
-    }
+    return xTaskCreate(_loop, "BPM Loop", configMINIMAL_STACK_SIZE, static_cast<void *>(this), 1, &_loopHandle);
 }
 
 void BloodPressureMonitor::_loop(void *params)

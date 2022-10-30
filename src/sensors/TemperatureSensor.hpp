@@ -2,15 +2,15 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include <AsyncMqttClient.h>
+#include "abstract/LoopTask.hpp"
 
-class TemperatureSensor
+class TemperatureSensor : public LoopTask
 {
 public:
     TemperatureSensor(uint8_t oneWireBus, AsyncMqttClient &mqttClient);
 
     void begin();
     bool start();
-    void stop();
 
 private:
     static std::string const _mqttPubTempC;
@@ -19,8 +19,6 @@ private:
 
     std::unique_ptr<OneWire> _oneWire;
     std::unique_ptr<DallasTemperature> _dallasSensors;
-
-    TaskHandle_t _loopTask;
 
     float _temperatureC;
 

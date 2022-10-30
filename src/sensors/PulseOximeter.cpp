@@ -32,15 +32,7 @@ bool PulseOximeter::begin(TwoWire &wirePort, int sda, int scl)
 
 bool PulseOximeter::start()
 {
-    return xTaskCreate(_loop, "Pulse Oximeter Loop", 2048, static_cast<void *>(this), 2, &_loopTask);
-}
-
-void PulseOximeter::stop() const
-{
-    if (_loopTask != nullptr)
-    {
-        vTaskDelete(_loopTask);
-    }
+    return xTaskCreate(_loop, "Pulse Oximeter Loop", 2048, static_cast<void *>(this), 2, &_loopHandle);
 }
 
 void PulseOximeter::_loop(void *params) // Static member function
@@ -117,7 +109,7 @@ void PulseOximeter::_publishData()
         }
         if (_validSPO2)
         {
-            _mqttClient->publish(_mqttPubHR.c_str(), 2, true, std::to_string(_spo2).c_str());
+            _mqttClient->publish(_mqttPubSpO2.c_str(), 2, true, std::to_string(_spo2).c_str());
         }
     }
 }
