@@ -22,11 +22,8 @@ BloodPressureMonitor bloodPressureMonitor(bpmPowerPin, mqttClient);
 
 void restart(byte seconds)
 {
-    pinMode(LED_BUILTIN, OUTPUT);
-    digitalWrite(LED_BUILTIN, HIGH);
     Serial.printf("Restarting in %u seconds...", seconds);
     delay(seconds * 1000);
-    digitalWrite(LED_BUILTIN, LOW);
     ESP.restart();
 }
 
@@ -69,12 +66,15 @@ void initMqtt()
 void setup()
 {
     Serial.begin(115200);
+    pinMode(LED_BUILTIN, OUTPUT);
 
+    digitalWrite(LED_BUILTIN, HIGH);
     if (!initWifiManager())
     {
         Serial.println("WiFi connection failed");
-        restart(5);
+        restart(3);
     }
+    digitalWrite(LED_BUILTIN, LOW);
 
     initMqtt();
     pulseOximeter.begin(Wire1, pulseOxSda, pulseOxScl);
